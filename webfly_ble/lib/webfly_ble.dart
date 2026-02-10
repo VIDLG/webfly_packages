@@ -352,8 +352,11 @@ class BleWebfModule extends WebFBaseModule {
         connectionState: event.connectionState.name,
       );
       dispatchEvent(
-        event: Event(BleEventType.connectionStateChanged),
-        data: payload.toJson(),
+        // Use CustomEvent so payload is exposed via `event.detail` (W3C CustomEvent).
+        event: CustomEvent(
+          BleEventType.connectionStateChanged,
+          detail: payload.toJson(),
+        ),
       );
     } catch (e) {
       _log.w('connectionStateChanged emit error: $e');
@@ -369,8 +372,11 @@ class BleWebfModule extends WebFBaseModule {
         value: event.value,
       );
       dispatchEvent(
-        event: Event(BleEventType.characteristicReceived),
-        data: payload.toJson(),
+        // Use CustomEvent so payload is exposed via `event.detail` (W3C CustomEvent).
+        event: CustomEvent(
+          BleEventType.characteristicReceived,
+          detail: payload.toJson(),
+        ),
       );
     } catch (e) {
       _log.w('characteristicReceived emit error: $e');

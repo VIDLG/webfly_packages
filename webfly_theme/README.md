@@ -16,9 +16,17 @@ WebF native module for theme: get/set theme preference, persist, and stream them
 
 ## JavaScript / TypeScript
 
-- **Get theme:** `getTheme()` → `Promise<WebfResponse<'light' | 'dark' | 'system'>>`
+- **Get theme:** `getTheme()` → `Promise<WebfResponse<ThemeState>>`
 - **Set theme:** `setTheme('light' | 'dark' | 'system')`
 - **System theme:** `getSystemTheme()` → `Promise<WebfResponse<'light' | 'dark'>>`
-- **Listen to changes:** `addThemeChangeListener((theme) => { ... })` (returns unsubscribe), or `window.addEventListener('themechange', (e) => { e.detail.theme })`
+- **Listen to changes (simple):** `addThemeChangeListener((themePreference) => { ... })` (returns unsubscribe)
+- **Listen to changes (low-level):** use `WebfModuleEventBus` on module `"Theme"` and subscribe to `'themechange'` events with payload:
 
-Flutter dispatches `themechange` (with `detail.theme`) and `colorschemchange` when theme changes so the frontend can stay in sync.
+  ```ts
+  interface ThemeState {
+    themePreference: 'light' | 'dark' | 'system';
+    resolvedTheme: 'light' | 'dark';
+  }
+  ```
+
+Flutter dispatches `themechange` (via ThemeWebfModule) and WebF updates `prefers-color-scheme` + `colorschemchange` when theme changes so the frontend can stay in sync.

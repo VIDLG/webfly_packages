@@ -2,7 +2,8 @@
 // No signals_flutter: callers use useStreamSignal(themeStream, initialValue: getTheme())
 // in the widgets that need theme reactivity.
 //
-// In app: import 'package:webfly_theme/webfly_theme.dart' show ThemeWebfModule, themeStream, getTheme, initializeTheme, setTheme;
+// In app: import 'package:webfly_theme/webfly_theme.dart'
+//          show ThemeWebfModule, themeStream, getTheme, getThemeState, initializeTheme, setTheme;
 //         WebF.defineModule((context) => ThemeWebfModule(context));
 
 import 'dart:async';
@@ -20,7 +21,38 @@ final _log = webflyLogger('webfly_theme');
 
 const String _themeModeKey = 'webfly_theme_mode';
 
-class _ThemeStore {
+/// Resolved theme for rendering; never includes `system`.
+enum ResolvedTheme { light, dark }
+
+/// Theme state used for WebF wire format (preference + resolved).
+class ThemeState {
+  const ThemeState({
+    required this.themePreference,
+    required this.resolvedTheme,
+  });
+
+  final ThemeMode themePreference;
+  final ResolvedTheme resolvedTheme;
+
+  Map<String, String> toJson() => <String, String>{
+        'themePreference': themePreference.toJson(),
+        'resolvedTheme': resolvedTheme.toJson(),
+      };
+}
+
+/// Resolve a [ThemeMode] (which may be `system`) into a concrete [ResolvedTheme].
+ResolvedTheme _resolveTheme(ThemeMode mode) {
+  if (mode == ThemeMode.system) {
+    final brightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    return brightness == Brightness.dark
+        ? ResolvedTheme.dark
+        : ResolvedTheme.light;
+  }
+  return mode == ThemeMode.dark ? ResolvedTheme.dark : ResolvedTheme.light;
+}
+
+class _ThemeStore with WidgetsBindingObserver {
   _ThemeStore._();
 
   static _ThemeStore? _instance;
@@ -34,9 +66,9 @@ class _ThemeStore {
 
   late final SharedPreferences _prefs;
   ThemeMode _current = ThemeMode.system;
-  final _themeChangeController = StreamController<ThemeMode>.broadcast();
+  final _themeChangeController = StreamController<ThemeState>.broadcast();
 
-  Stream<ThemeMode> get themeStream => _themeChangeController.stream;
+  Stream<ThemeState> get themeStream => _themeChangeController.stream;
 
   static Future<void> create() async {
     if (_instance != null) return;
@@ -54,19 +86,41 @@ class _ThemeStore {
       );
     }
     _instance = store;
+    WidgetsBinding.instance.addObserver(store);
   }
 
   ThemeMode get current => _current;
+
+  /// Resolved theme for rendering based on the current preference.
+  ResolvedTheme get resolved {
+    return _resolveTheme(_current);
+  }
+
+  /// Combined theme state (preference + resolved). Convenient for emitting
+  /// events or exposing a structured snapshot.
+  ThemeState get state => ThemeState(
+        themePreference: _current,
+        resolvedTheme: resolved,
+      );
 
   Future<void> setTheme(ThemeMode mode) async {
     if (_current == mode) return;
     _current = mode;
     // Persist selection; let errors surface to the caller.
     await _prefs.setString(_themeModeKey, mode.name);
-    _themeChangeController.add(mode);
+    _themeChangeController.add(state);
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    // Only react when user preference is `system`.
+    if (_current != ThemeMode.system) return;
+    // Emit a new ThemeState snapshot so listeners (Flutter UI / WebF) can react.
+    _themeChangeController.add(state);
   }
 
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _themeChangeController.close();
     _instance = null;
   }
@@ -77,12 +131,18 @@ Future<void> initializeTheme() async {
   await _ThemeStore.create();
 }
 
-/// Current theme mode (sync). Use as initialValue for useStreamSignal or after initializeTheme().
-ThemeMode getTheme() => _ThemeStore.instance.current;
+/// Current theme state (preference + resolved). Use as initialValue for
+/// useStreamSignal or after initializeTheme().
+ThemeState getTheme() => _ThemeStore.instance.state;
 
-/// Stream of theme changes (ThemeMode). Emits when theme is set from JS or Flutter.
+/// Resolved theme for rendering (light/dark only).
+ResolvedTheme getResolvedTheme() {
+  return _ThemeStore.instance.resolved;
+}
+
+/// Stream of theme changes (ThemeState). Emits when theme is set from JS or Flutter.
 /// Caller: useStreamSignal(() => themeStream, initialValue: getTheme()) for a reactive signal.
-Stream<ThemeMode> get themeStream => _ThemeStore.instance.themeStream;
+Stream<ThemeState> get themeStream => _ThemeStore.instance.themeStream;
 
 /// Set theme from Flutter (e.g. settings dialog). Updates store and emits on [themeStream].
 Future<void> setTheme(ThemeMode mode) {
@@ -102,7 +162,7 @@ Future<void> setTheme(ThemeMode mode) {
 class ThemeWebfModule extends WebFBaseModule {
   ThemeWebfModule(super.manager);
 
-  StreamSubscription<ThemeMode>? _themeSub;
+  StreamSubscription<ThemeState>? _themeSub;
 
   @override
   Future<void> initialize() async {
@@ -120,7 +180,7 @@ class ThemeWebfModule extends WebFBaseModule {
       case 'setTheme':
         return _setTheme(arguments);
       case 'getTheme':
-        return webfOk(_getThemeName());
+        return webfOk(_getThemeState());
       case 'getSystemTheme':
         return webfOk(_getSystemTheme());
       default:
@@ -129,14 +189,11 @@ class ThemeWebfModule extends WebFBaseModule {
     }
   }
 
-  String _getSystemTheme() {
-    final brightness =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    // Serialize enum via shared EnumToJson extension.
-    return brightness.toJson();
-  }
+  String _getSystemTheme() => _resolveTheme(ThemeMode.system).toJson();
 
-  String _getThemeName() => _ThemeStore.instance.current.toJson();
+  Map<String, String> _getThemeState() {
+    return _ThemeStore.instance.state.toJson();
+  }
 
   Future<Map<String, dynamic>> _setTheme(List<dynamic> arguments) async {
     if (arguments.isEmpty) {
@@ -155,11 +212,16 @@ class ThemeWebfModule extends WebFBaseModule {
     return webfOk(null);
   }
 
-  void _emitThemeChanged(ThemeMode mode) {
+  void _emitThemeChanged(ThemeState state) {
     try {
+      _log.d(
+        'ThemeWebfModule._emitThemeChanged: preference=${state.themePreference} '
+        'resolved=${state.resolvedTheme}',
+      );
       dispatchEvent(
-        event: Event('themechange'),
-        data: <String, dynamic>{'theme': mode.toJson()},
+        // Use CustomEvent so that payload is exposed via `event.detail`
+        // following the W3C CustomEvent convention.
+        event: CustomEvent('themechange', detail: state.toJson()),
       );
     } catch (e) {
       _log.w('themechange emit error: $e');

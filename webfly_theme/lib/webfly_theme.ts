@@ -4,7 +4,7 @@
  *
  * Usage:
  *   import { getTheme, setTheme, getSystemTheme, addThemeChangeListener } from '@webfly/theme';
- *   const res = await getTheme();  // Result<ThemePreference, string>
+ *   const res = await getTheme();  // Result<ThemeState, string>
  *   await setTheme('dark');
  *   const unsub = addThemeChangeListener((theme) => console.log('theme:', theme));
  *
@@ -16,14 +16,22 @@ import { createModuleInvoker, WebfModuleEventBus, type Result } from '../../webf
 
 const invoke = createModuleInvoker('Theme');
 
-export type ThemePreference = 'light' | 'dark' | 'system';
-export type SystemTheme = 'light' | 'dark';
+// Mirror Dart naming: ThemeMode (may be 'system') and ResolvedTheme (light/dark only).
+export type ThemeMode = 'light' | 'dark' | 'system';
+export type ResolvedTheme = 'light' | 'dark';
+
+export interface ThemeState {
+  /** User preference: 'light' | 'dark' | 'system'. */
+  themePreference: ThemeMode;
+  /** Resolved theme for rendering: 'light' | 'dark'. */
+  resolvedTheme: ResolvedTheme;
+}
 
 /**
- * Get current theme preference.
+ * Get current theme state: user preference + resolved theme.
  */
-export function getTheme(): Promise<Result<ThemePreference, string>> {
-  return invoke<ThemePreference>('getTheme');
+export function getTheme(): Promise<Result<ThemeState, string>> {
+  return invoke<ThemeState>('getTheme');
 }
 
 /**
@@ -32,26 +40,22 @@ export function getTheme(): Promise<Result<ThemePreference, string>> {
  * Returns `Result<void, string>`; callers usually only care about success/failure,
  * so the `ok` payload is not used.
  */
-export function setTheme(theme: ThemePreference): Promise<Result<void, string>> {
+export function setTheme(theme: ThemeMode): Promise<Result<void, string>> {
   return invoke<void>('setTheme', theme);
 }
 
 /**
  * Get current platform (system) theme.
  */
-export function getSystemTheme(): Promise<Result<SystemTheme, string>> {
-  return invoke<SystemTheme>('getSystemTheme');
+export function getSystemTheme(): Promise<Result<ResolvedTheme, string>> {
+  return invoke<ResolvedTheme>('getSystemTheme');
 }
 
 const THEME_CHANGE_EVENT = 'themechange';
 
-export interface ThemeChangeEventDetail {
-  theme: ThemePreference;
-}
-
 type ThemeEventType = typeof THEME_CHANGE_EVENT;
 interface ThemeEventPayloadMap {
-  themechange: ThemeChangeEventDetail;
+  themechange: ThemeState;
 }
 
 class ThemeEventBus extends WebfModuleEventBus<ThemeEventType, ThemeEventPayloadMap> {
@@ -66,11 +70,12 @@ const defaultThemeEventBus = new ThemeEventBus();
  * Listen to theme changes from the Theme WebF module.
  * Returns an unsubscribe function.
  */
-export function addThemeChangeListener(callback: (theme: ThemePreference) => void): () => void {
+export function addThemeChangeListener(callback: (state: ThemeState) => void): () => void {
   return defaultThemeEventBus.addListener('themechange', (payload) => {
-    const detail = payload as ThemeChangeEventDetail | undefined;
-    const theme = detail?.theme;
-    if (!theme) return;
-    callback(theme);
+    const detail = payload as ThemeState | undefined;
+    if (!detail) {
+      throw new Error('[ThemeEventBus] themechange payload is undefined');
+    }
+    callback(detail);
   });
 }

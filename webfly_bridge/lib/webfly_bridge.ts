@@ -74,10 +74,15 @@ export abstract class WebfModuleEventBus<
     const w = getWebf();
     if (!w?.addWebfModuleListener) return;
     this.listenerRegistered = true;
-    w.addWebfModuleListener(this.moduleName, (event: Event, _extra: unknown) => {
+    w.addWebfModuleListener(this.moduleName, (event: Event, extra: unknown) => {
       const e = event as { type?: string; detail?: unknown };
+      // WebF passes payload either on event.detail or as the extra argument.
+      const payload = e.detail ?? extra;
+       // Lightweight log to help trace module events during debugging.
+       // eslint-disable-next-line no-console
+       console.debug('[WebfModuleEvent]', this.moduleName, e.type, payload);
       const set = this.handlers.get(e.type ?? '');
-      if (set) for (const h of set) h(e.detail);
+      if (set) for (const h of set) h(payload);
     });
   }
 
