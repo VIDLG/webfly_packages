@@ -1,0 +1,12 @@
+name: webfly_bridge
+description: Shared WebF bridge (Dart + TS) - wire format, module helpers, logger for webfly_ble, webfly_permission, webfly_theme, etc.
+version: 0.1.0
+
+publish_to: none
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  anyhow: ^3.0.1
+  logger: ^2.6.2

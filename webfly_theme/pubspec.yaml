@@ -1,0 +1,16 @@
+name: webfly_theme
+description: WebF native module for theme (get/set/listen). Persists theme preference and exposes a stream for theme changes.
+version: 0.1.0
+
+publish_to: none
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: 2.5.4
+  webf: ^0.24.11
+  webfly_bridge:
+    path: ../webfly_bridge

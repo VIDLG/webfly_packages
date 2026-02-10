@@ -1,0 +1,19 @@
+## Dart / Flutter package artifacts
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+## Flutter-specific tooling
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-versions
+
+## Coverage
+coverage/
+
+## Node / TypeScript artifacts (for TS helpers under packages/)
+node_modules/
+dist/
+*.js.map
+
