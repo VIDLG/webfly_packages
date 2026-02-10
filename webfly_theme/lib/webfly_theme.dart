@@ -102,6 +102,15 @@ Future<void> setTheme(ThemeMode mode) {
 class ThemeWebfModule extends WebFBaseModule {
   ThemeWebfModule(super.manager);
 
+  StreamSubscription<ThemeMode>? _themeSub;
+
+  @override
+  Future<void> initialize() async {
+    // Ensure theme store is initialized so themeStream is ready.
+    await initializeTheme();
+    _themeSub ??= themeStream.listen(_emitThemeChanged);
+  }
+
   @override
   String get name => 'Theme';
 
@@ -146,6 +155,20 @@ class ThemeWebfModule extends WebFBaseModule {
     return webfOk(null);
   }
 
+  void _emitThemeChanged(ThemeMode mode) {
+    try {
+      dispatchEvent(
+        event: Event('themechange'),
+        data: <String, dynamic>{'theme': mode.toJson()},
+      );
+    } catch (e) {
+      _log.w('themechange emit error: $e');
+    }
+  }
+
   @override
-  void dispose() {}
+  void dispose() {
+    _themeSub?.cancel();
+    _themeSub = null;
+  }
 }
