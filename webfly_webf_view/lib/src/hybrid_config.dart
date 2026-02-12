@@ -5,6 +5,8 @@
 /// host app and are passed in via [WebfHybridConfig].
 library;
 
+import 'package:flutter/material.dart';
+
 import 'go_router_delegate.dart';
 
 /// Immutable configuration describing how a host app wires WebF hybrid routing.
@@ -114,12 +116,10 @@ class WebfHybridConfig implements WebfHybridStrategy {
       bundleUrl != null && bundleUrl.isNotEmpty,
       'url parameter missing in URI',
     );
-    final resolvedLocation =
-        normalizeWebfInnerPath(location, fallbackLocation);
+    final resolvedLocation = normalizeWebfInnerPath(location, fallbackLocation);
     final encodedUrl = Uri.encodeComponent(bundleUrl!);
     final encodedCtrl = Uri.encodeComponent(
-      fromUri.queryParameters[controllerParam] ??
-          'webf-${bundleUrl.hashCode}',
+      fromUri.queryParameters[controllerParam] ?? 'webf-${bundleUrl.hashCode}',
     );
     final encodedLocation = Uri.encodeComponent(resolvedLocation);
     return '$entryRoute?$bundleUrlParam=$encodedUrl'
@@ -129,7 +129,12 @@ class WebfHybridConfig implements WebfHybridStrategy {
 }
 
 /// Default [GoRouterHybridDelegate] using [WebfHybridConfig.defaults].
-final defaultGoRouterDelegate = GoRouterHybridDelegate(WebfHybridConfig.defaults);
+final defaultGoRouterDelegate = GoRouterHybridDelegate(
+  WebfHybridConfig.defaults,
+);
+
+/// Default [RouteObserver] for WebF pages.
+final defaultWebfRouteObserver = RouteObserver<PageRoute>();
 
 /// Normalizes a WebF *inner route* string and returns a canonical location.
 ///

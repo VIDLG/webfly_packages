@@ -12,6 +12,10 @@ dependencies:
     sdk: flutter
   webf: ^0.24.11
   go_router: ^17.0.1
+  flutter_hooks: ^0.21.3
+  flutter_use: ^1.0.0
+  anyhow: ^3.0.1
   webfly_bridge:
     path: ../webfly_bridge
-
+  webfly_theme:
+    path: ../webfly_theme
