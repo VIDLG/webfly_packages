@@ -1,0 +1,18 @@
+name: webfly_updater
+description: Reusable update checker and OTA installer (GitHub Releases + ota_update).
+version: 0.1.0
+
+publish_to: none
+
+environment:
+  sdk: ^3.10.7
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  package_info_plus: ^9.0.0
+  ota_update: ^7.1.0
+  dio: ^5.4.0
+  logger: ^2.2.0
+
