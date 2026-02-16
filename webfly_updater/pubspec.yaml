@@ -15,4 +15,5 @@ dependencies:
   ota_update: ^7.1.0
   dio: ^5.4.0
   logger: ^2.2.0
+  pub_semver: ^2.1.5
 

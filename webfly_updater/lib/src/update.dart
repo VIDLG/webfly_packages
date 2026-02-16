@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import 'package:ota_update/ota_update.dart';
+import 'package:pub_semver/pub_semver.dart';
 
 import 'error.dart';
 import 'models.dart';
@@ -72,6 +73,18 @@ Future<ReleaseInfo?> checkForUpdates({
   return _releaseMetadataToReleaseInfo(release, currentVersion, testMode);
 }
 
+/// Strip the optional `v` prefix and any build metadata (`+N`) so the string
+/// can be parsed by [Version.parse].
+Version _parseVersion(String v) {
+  var stripped = v.startsWith('v') ? v.substring(1) : v;
+  stripped = stripped.split('+').first;
+  return Version.parse(stripped);
+}
+
+/// Return `true` when [remote] is strictly newer than [local].
+bool _isNewer(String remote, String local) =>
+    _parseVersion(remote) > _parseVersion(local);
+
 /// Convert generic [ReleaseMetadata] to [ReleaseInfo].
 ReleaseInfo? _releaseMetadataToReleaseInfo(
   ReleaseMetadata release,
@@ -80,7 +93,7 @@ ReleaseInfo? _releaseMetadataToReleaseInfo(
 ) {
   final version = release.version;
   if (version.isEmpty) return null;
-  if (!testMode && version == currentVersion) return null;
+  if (!testMode && !_isNewer(version, currentVersion)) return null;
 
   // Find APK and optional .sha256 assets.
   final apkAsset = release.findAssetByExt('.apk');
