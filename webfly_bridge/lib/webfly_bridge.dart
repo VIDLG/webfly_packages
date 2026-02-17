@@ -3,13 +3,6 @@
 
 import 'package:anyhow/anyhow.dart';
 
-export 'logger.dart' show
-    Level,
-    Logger,
-    webflyLogger,
-    setWebflyLogLevel,
-    webflyLogLevel;
-
 /// Success payload for WebF TS: { type: 'ok', value: value }.
 Map<String, dynamic> webfOk(dynamic value) => {'type': 'ok', 'value': value};
 

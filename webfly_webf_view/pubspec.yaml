@@ -19,3 +19,4 @@ dependencies:
     path: ../webfly_bridge
   webfly_theme:
     path: ../webfly_theme
+  logging: ^1.3.0

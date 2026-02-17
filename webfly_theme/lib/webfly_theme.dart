@@ -12,8 +12,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webf/webf.dart';
 import 'package:webfly_bridge/webfly_bridge.dart';
+import 'package:logging/logging.dart';
 
-final _log = webflyLogger('webfly_theme');
+final _log = Logger('webfly_theme');
 
 // ---------------------------------------------------------------------------
 // Theme store: current value + persistence + broadcast stream (no Signal)
@@ -184,7 +185,7 @@ class ThemeWebfModule extends WebFBaseModule {
       case 'getSystemTheme':
         return webfOk(_getSystemTheme());
       default:
-        _log.w('Unknown method: $method');
+        _log.warning('Unknown method: $method');
         return webfErr('Unknown method: $method');
     }
   }
@@ -214,7 +215,7 @@ class ThemeWebfModule extends WebFBaseModule {
 
   void _emitThemeChanged(ThemeState state) {
     try {
-      _log.d(
+      _log.fine(
         'ThemeWebfModule._emitThemeChanged: preference=${state.themePreference} '
         'resolved=${state.resolvedTheme}',
       );
@@ -224,7 +225,7 @@ class ThemeWebfModule extends WebFBaseModule {
         event: CustomEvent('themechange', detail: state.toJson()),
       );
     } catch (e) {
-      _log.w('themechange emit error: $e');
+      _log.warning('themechange emit error: $e');
     }
   }
 

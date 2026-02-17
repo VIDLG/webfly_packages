@@ -1,12 +1,17 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
-import 'package:logger/logger.dart';
-import 'package:ota_update/ota_update.dart';
+import 'package:logging/logging.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pub_semver/pub_semver.dart';
 
 import 'error.dart';
 import 'models.dart';
+import 'signature.dart';
 
-final _log = Logger();
+final _log = Logger('webfly_updater');
 
 // ---------------------------------------------------------------------------
 // Network Error Handling
@@ -100,7 +105,7 @@ ReleaseInfo? _releaseMetadataToReleaseInfo(
   final sha256Asset = release.findAssetByExt('.sha256');
 
   if (apkAsset == null || apkAsset.downloadUrl.isEmpty) {
-    _log.d('Release $version has no APK asset');
+    _log.fine('Release $version has no APK asset');
     return null;
   }
 
@@ -113,99 +118,129 @@ ReleaseInfo? _releaseMetadataToReleaseInfo(
 }
 
 // ---------------------------------------------------------------------------
-// Download & Install via ota_update
+// Download & Install
 // ---------------------------------------------------------------------------
 
+/// Download the APK from [downloadUrl] and trigger system install.
+///
+/// Yields [UpdateState]s: [UpdateDownloading] with progress, [UpdateInstalling]
+/// when the system installer is triggered, [UpdateReady] on success, or
+/// [UpdateFailed] on error.
+///
+/// [networkConfig] allows customizing network request parameters.
 Stream<UpdateState> downloadAndInstall(
-  ReleaseInfo release, {
+  String downloadUrl, {
   NetworkConfig? networkConfig,
-}) async* {
-  yield const UpdateDownloading(progress: 0);
+}) {
+  final controller = StreamController<UpdateState>();
 
-  // 1. Fetch SHA-256 checksum if available.
-  String? sha256;
-  if (release.sha256Url != null) {
-    try {
-      sha256 = await _fetchSha256(
-        release.sha256Url!,
-        networkConfig: networkConfig,
-      );
-      _log.d('SHA256 checksum: $sha256');
-    } catch (e) {
-      _log.d('Failed to fetch SHA256: $e');
-    }
-  }
+  _downloadAndInstallInternal(
+    downloadUrl,
+    networkConfig: networkConfig,
+    onProgress: (progress) {
+      controller.add(UpdateDownloading(progress: progress));
+    },
+    onComplete: (apkPath) {
+      controller.add(UpdateReady(apkPath: apkPath));
+      controller.close();
+    },
+    onError: (error) {
+      controller.add(UpdateFailed(error));
+      controller.close();
+    },
+    onInstalling: () {
+      controller.add(const UpdateInstalling());
+    },
+  );
 
-  // 2. Use ota_update to download + verify + install.
-  try {
-    yield* _executeOta(release.downloadUrl, sha256: sha256);
-  } catch (e) {
-    yield UpdateFailed(DownloadError(e.toString()));
-  }
+  return controller.stream;
 }
 
-/// Fetch the SHA-256 hash string from a `.sha256` file URL.
-Future<String> _fetchSha256(String url, {NetworkConfig? networkConfig}) async {
+Future<void> _downloadAndInstallInternal(
+  String downloadUrl, {
+  NetworkConfig? networkConfig,
+  required void Function(double progress) onProgress,
+  required void Function(String apkPath) onComplete,
+  required void Function(UpdateError error) onError,
+  required void Function() onInstalling,
+}) async {
   final config = networkConfig ?? const NetworkConfig();
   final dio = Dio();
   dio.options.connectTimeout = config.connectTimeout;
   dio.options.receiveTimeout = config.receiveTimeout;
   dio.options.followRedirects = config.followRedirects;
   dio.options.maxRedirects = config.maxRedirects;
+  dio.options.headers.addAll(config.headers);
 
-  final sha256 = await _executeRequest<Sha256Response>(
-    () => dio.getUri(Uri.parse(url), options: Options(headers: config.headers)),
-    parser: (data) => Sha256Response.fromContent(data as String),
-  );
+  onProgress(0);
 
-  return sha256.hash;
-}
+  Directory? tempDir;
+  String? apkPath;
 
-/// Map `ota_update` events to [UpdateState].
-Stream<UpdateState> _executeOta(String url, {String? sha256}) async* {
   try {
-    await for (final event in OtaUpdate().execute(
-      url,
-      sha256checksum: sha256,
-    )) {
-      switch (event.status) {
-        case OtaStatus.DOWNLOADING:
-          final progress = double.tryParse(event.value ?? '0') ?? 0;
-          yield UpdateDownloading(progress: progress / 100);
-        case OtaStatus.INSTALLING:
-          yield const UpdateInstalling();
-        case OtaStatus.INSTALLATION_DONE:
-          yield const UpdateReady();
-        case OtaStatus.INSTALLATION_ERROR:
-          yield UpdateFailed(
-            InstallError(event.value ?? 'Installation failed'),
-          );
-        case OtaStatus.ALREADY_RUNNING_ERROR:
-          yield const UpdateFailed(
-            DownloadError('Another update is already in progress'),
-          );
-        case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
-          yield const UpdateFailed(
-            InstallError('Install permission not granted'),
-          );
-        case OtaStatus.INTERNAL_ERROR:
-          yield UpdateFailed(DownloadError(event.value ?? 'Internal error'));
-        case OtaStatus.DOWNLOAD_ERROR:
-          yield UpdateFailed(DownloadError(event.value ?? 'Download failed'));
-        case OtaStatus.CHECKSUM_ERROR:
-          yield UpdateFailed(
-            HashVerificationError(
-              expected: sha256 ?? 'unknown',
-              actual: event.value ?? 'unknown',
-            ),
-          );
-        case OtaStatus.CANCELED:
-          yield const UpdateFailed(DownloadError('Download canceled'));
+    tempDir = await getTemporaryDirectory();
+    final fileName = downloadUrl.split('/').last.split('?').first;
+    apkPath = '${tempDir.path}/$fileName';
+
+    _log.info('Downloading APK to: $apkPath');
+
+    int lastLoggedPercent = 0;
+    await dio.download(
+      downloadUrl,
+      apkPath,
+      onReceiveProgress: (received, total) {
+        if (total > 0) {
+          final progress = received / total;
+          onProgress(progress);
+          final percent = (progress * 100).floor();
+          if (percent >= lastLoggedPercent + 10) {
+            lastLoggedPercent = (percent ~/ 10) * 10;
+            _log.info('Download progress: $lastLoggedPercent%');
+          }
+        }
+      },
+    );
+
+    _log.info('Download complete: $apkPath');
+
+    final apkSignature = await getApkSignature(apkPath);
+    _log.info('Downloaded APK signature: $apkSignature');
+
+    final installedSignature = await getInstalledSignature();
+    _log.info('Installed app signature: $installedSignature');
+
+    if (apkSignature != null && installedSignature != null) {
+      if (apkSignature != installedSignature) {
+        _log.warning('SIGNATURE MISMATCH! APK may not install due to different signing key.');
+      } else {
+        _log.info('Signatures match - installation should succeed.');
       }
     }
 
-    yield const UpdateReady();
+    onInstalling();
+
+    final result = await OpenFilex.open(apkPath);
+    if (result.type != ResultType.done) {
+      _log.severe('Failed to open APK: ${result.message}');
+      onError(InstallError('Failed to open APK: ${result.message}'));
+      return;
+    }
+
+    _log.info('Install dialog triggered');
+    onComplete(apkPath);
+  } on DioException catch (e) {
+    _log.severe('Download error: ${e.message}');
+    onError(DownloadError('Download failed: ${e.message}'));
   } catch (e) {
-    yield UpdateFailed(DownloadError(e.toString()));
+    _log.severe('Unexpected error: $e');
+    onError(DownloadError('Unexpected error: $e'));
+  }
+}
+
+/// Opens the APK file for installation.
+Future<void> installApk(String apkPath) async {
+  final result = await OpenFilex.open(apkPath);
+  if (result.type != ResultType.done) {
+    throw InstallError('Failed to open APK: ${result.message}');
   }
 }

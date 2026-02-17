@@ -6,10 +6,10 @@ import 'package:flutter_use/flutter_use.dart';
 import 'package:webf/webf.dart';
 import 'package:anyhow/anyhow.dart';
 import 'package:webfly_theme/webfly_theme.dart';
-import 'package:webfly_bridge/logger.dart';
+import 'package:logging/logging.dart';
 import 'hybrid_config.dart';
 
-final _log = webflyLogger('webf_view');
+final _log = Logger('webf_view');
 
 // ---------------------------------------------------------------------------
 // Error helpers (internal to this file)
@@ -25,10 +25,10 @@ Result<T> _webfControllerError<T>({
   StackTrace? stackTrace,
 }) {
   final Object rootCause = cause ?? message ?? 'WebF controller error';
-  _log.e(
+  _log.severe(
     '[WebFControllerError] Failed to initialize WebF controller',
-    error: rootCause,
-    stackTrace: stackTrace,
+    rootCause,
+    stackTrace,
   );
   return Err<T>(Error(rootCause))
       .context('Failed to initialize WebF controller')
@@ -48,10 +48,10 @@ Result<T> _routeResolutionError<T>({
   StackTrace? stackTrace,
 }) {
   final Object rootCause = cause ?? message ?? 'Route resolution error';
-  _log.e(
+  _log.severe(
     '[RouteResolutionError] Failed to resolve route',
-    error: rootCause,
-    stackTrace: stackTrace,
+    rootCause,
+    stackTrace,
   );
   return Err<T>(Error(rootCause))
       .context('Failed to resolve route')
@@ -93,7 +93,7 @@ bool _canResolveHybridRoute(
     final dynamic result = view.getHybridRouterView(pathOnly);
     return result != null;
   } catch (e) {
-    _log.d('[WebFView] Hybrid route check failed: $e');
+    _log.fine('[WebFView] Hybrid route check failed: $e');
     return false;
   }
 }
@@ -117,9 +117,9 @@ Future<Result<WebFController>> injectWebfBundleAsync({
           createController: () => WebFController(
             routeObserver: routeObserver ?? defaultWebfRouteObserver,
             onJSError: (String errorMessage) {
-              _log.e(
+              _log.severe(
                 '❌ JavaScript Error in: $controllerName\n$errorMessage',
-                error: errorMessage,
+                errorMessage,
               );
               onJSRuntimeError?.call(errorMessage);
             },
@@ -346,9 +346,8 @@ class WebFView extends HookWidget {
         ok: (controller) => controller,
         err: (error) {
           // Log additional business context for debugging.
-          _log.d(
-            '[WebFView] Error context',
-            error:
+          _log.fine(
+            '[WebFView] Error context: '
                 'route=$routePath, controller=$controllerName, '
                 'url=$url, timeout=${timeout.inSeconds}s, '
                 'cacheControllers=$cacheControllers, '
@@ -442,9 +441,8 @@ class WebFView extends HookWidget {
         );
         final error = result.unwrapErr();
 
-        _log.d(
-          '[WebFView] Route timeout context',
-          error:
+        _log.fine(
+          '[WebFView] Route timeout context: '
               'route=$routePath, controller=$controllerName, '
               'pollInterval=${hybridRoutePollInterval.inMilliseconds}ms, '
               'timeout=${hybridRouteResolutionTimeout.inSeconds}s',

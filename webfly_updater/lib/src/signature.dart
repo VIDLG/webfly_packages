@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
-final _log = Logger();
+final _log = Logger('webfly_updater');
 
 // ---------------------------------------------------------------------------
 // APK Signature Verification
@@ -17,10 +17,10 @@ Future<String?> getInstalledSignature() async {
       'getInstalledSignature',
     );
   } on PlatformException catch (e) {
-    _log.d('Failed to get installed signature: $e');
+    _log.fine('Failed to get installed signature: $e');
     return null;
   } on MissingPluginException {
-    _log.d('Signature channel not available (non-Android platform?)');
+    _log.fine('Signature channel not available (non-Android platform?)');
     return null;
   }
 }
@@ -33,10 +33,10 @@ Future<String?> getApkSignature(String apkPath) async {
       'path': apkPath,
     });
   } on PlatformException catch (e) {
-    _log.d('Failed to get APK signature: $e');
+    _log.fine('Failed to get APK signature: $e');
     return null;
   } on MissingPluginException {
-    _log.d('Signature channel not available');
+    _log.fine('Signature channel not available');
     return null;
   }
 }

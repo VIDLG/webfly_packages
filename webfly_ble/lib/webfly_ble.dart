@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:anyhow/anyhow.dart';
 import 'package:webf/webf.dart';
 import 'package:webfly_bridge/webfly_bridge.dart';
+import 'package:logging/logging.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:webfly_ble/src/adapter.dart';
 import 'package:webfly_ble/src/characteristic.dart';
@@ -20,7 +21,7 @@ import 'package:webfly_ble/src/device.dart';
 import 'package:webfly_ble/src/dto.dart';
 import 'package:webfly_ble/src/options.dart';
 
-final _log = webflyLogger('webfly_ble');
+final _log = Logger('webfly_ble');
 
 // ---------------------------------------------------------------------------
 // BLE event types (Dart side; matches ble.ts event payload types)
@@ -125,7 +126,7 @@ class BleWebfModule extends WebFBaseModule {
         return _setNotifyValue(arguments);
       default:
         final error = '[BleModule] Unknown method: $method';
-        _log.w(error);
+        _log.warning(error);
         return webfErr(error);
     }
   }
@@ -359,7 +360,7 @@ class BleWebfModule extends WebFBaseModule {
         ),
       );
     } catch (e) {
-      _log.w('connectionStateChanged emit error: $e');
+      _log.warning('connectionStateChanged emit error: $e');
     }
   }
 
@@ -379,7 +380,7 @@ class BleWebfModule extends WebFBaseModule {
         ),
       );
     } catch (e) {
-      _log.w('characteristicReceived emit error: $e');
+      _log.warning('characteristicReceived emit error: $e');
     }
   }
 

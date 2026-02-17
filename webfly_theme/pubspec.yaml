@@ -14,3 +14,4 @@ dependencies:
   webf: ^0.24.11
   webfly_bridge:
     path: ../webfly_bridge
+  logging: ^1.3.0

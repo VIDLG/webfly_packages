@@ -114,6 +114,11 @@ class UpdateAvailable extends UpdateState {
   const UpdateAvailable(this.release);
 }
 
+/// Preparing to download (waiting for download manager).
+class UpdatePreparing extends UpdateState {
+  const UpdatePreparing();
+}
+
 /// APK is being downloaded.
 class UpdateDownloading extends UpdateState {
   /// Progress value from 0.0 to 1.0.
@@ -128,7 +133,8 @@ class UpdateInstalling extends UpdateState {
 
 /// Installation was triggered successfully (user sees system UI).
 class UpdateReady extends UpdateState {
-  const UpdateReady();
+  final String apkPath;
+  const UpdateReady({required this.apkPath});
 }
 
 /// The app is already up to date.
@@ -140,4 +146,9 @@ class UpdateUpToDate extends UpdateState {
 class UpdateFailed extends UpdateState {
   final UpdateError error;
   const UpdateFailed(this.error);
+}
+
+/// Download was cancelled by the user.
+class UpdateCancelled extends UpdateState {
+  const UpdateCancelled();
 }

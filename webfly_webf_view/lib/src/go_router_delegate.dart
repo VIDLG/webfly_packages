@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:webf/webf.dart';
-import 'package:webfly_bridge/logger.dart';
+import 'package:logging/logging.dart';
 
-final _log = webflyLogger('webfly_webf_view');
+final _log = Logger('webfly_webf_view');
 
 /// Access GoRouter's internal [NavigatorState].
 ///
@@ -81,7 +81,7 @@ class GoRouterHybridDelegate extends HybridHistoryDelegate {
   final WebfHybridStrategy _strategy;
 
   String _packIfWebfInnerRoute(BuildContext context, String location) {
-    _log.d('request location=$location');
+    _log.fine('request location=$location');
 
     // GoRouterState.of throws if context is outside a GoRouter tree;
     // that's a programming error — this delegate is GoRouter-specific.
@@ -92,7 +92,7 @@ class GoRouterHybridDelegate extends HybridHistoryDelegate {
 
     // If it's already a Flutter-managed route, pass through as-is.
     if (_strategy.isFlutterManagedRoute(targetUri.path)) {
-      _log.d('Flutter-managed route detected path=${targetUri.path}, passthrough');
+      _log.fine('Flutter-managed route detected path=${targetUri.path}, passthrough');
       return location;
     }
 
@@ -100,7 +100,7 @@ class GoRouterHybridDelegate extends HybridHistoryDelegate {
     // This should always be true when JS navigates from within a loaded WebF;
     // a false here likely indicates a context/widget-tree issue.
     if (!_strategy.canPackFromUri(currentUri)) {
-      _log.w('missing bundle url in currentUri=$currentUri, passthrough location=$location');
+      _log.warning('missing bundle url in currentUri=$currentUri, passthrough location=$location');
       return location;
     }
 
@@ -110,7 +110,7 @@ class GoRouterHybridDelegate extends HybridHistoryDelegate {
       location: location,
       fromUri: currentUri,
     );
-    _log.d('packed location=$location currentUri=$currentUri -> $packed');
+    _log.fine('packed location=$location currentUri=$currentUri -> $packed');
     return packed;
   }
 
@@ -136,18 +136,18 @@ class GoRouterHybridDelegate extends HybridHistoryDelegate {
       // Context is no longer under a GoRouter route tree (e.g. during
       // pop/unmount). JS-side routers may still query the path during
       // teardown — return a safe fallback instead of crashing.
-      _log.d('path() context detached from GoRouter, fallback');
+      _log.fine('path() context detached from GoRouter, fallback');
       return initialRoute ?? '/';
     }
 
-    _log.d('path() current uri=$uri');
+    _log.fine('path() current uri=$uri');
 
     // Hybrid routing packs the real web route into a query parameter.
     // For WebF/JS routers we should expose the inner route (e.g. `/led`)
     // rather than the outer Flutter route (e.g. `/_/app?url=...&loc=%2Fled`).
     if (_strategy.isWebfEntryRoute(uri.path)) {
       final inner = _strategy.resolveWebfLocation(uri);
-      _log.d('path() wrapper route=${uri.path} inner=$inner');
+      _log.fine('path() wrapper route=${uri.path} inner=$inner');
       return inner;
     }
 
@@ -174,7 +174,7 @@ class GoRouterHybridDelegate extends HybridHistoryDelegate {
     try {
       return jsonEncode(GoRouterState.of(context).extra ?? {});
     } on GoError {
-      _log.d('state() context detached from GoRouter, fallback');
+      _log.fine('state() context detached from GoRouter, fallback');
       return jsonEncode(initialState ?? {});
     }
   }

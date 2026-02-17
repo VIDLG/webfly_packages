@@ -4,9 +4,10 @@
 
 import 'package:permission_handler/permission_handler.dart';
 import 'package:webf/webf.dart';
+import 'package:logging/logging.dart';
 import 'package:webfly_bridge/webfly_bridge.dart';
 
-final _log = webflyLogger('webfly_permission');
+final _log = Logger('webfly_permission');
 
 Permission? _permissionFromName(String name) {
   switch (name) {
@@ -111,7 +112,7 @@ class PermissionHandlerWebfModule extends WebFBaseModule {
       case 'shouldShowRequestRationale':
         return _shouldShowRequestRationale(arguments);
       default:
-        _log.w('Unknown method: $method');
+        _log.warning('Unknown method: $method');
         return webfErr('Unknown method: $method');
     }
   }
@@ -132,7 +133,7 @@ class PermissionHandlerWebfModule extends WebFBaseModule {
       final status = await permission.status;
       return webfOk(status.name);
     } catch (e) {
-      _log.w('checkStatus failed: $e');
+      _log.warning('checkStatus failed: $e');
       return webfErr(e.toString());
     }
   }
@@ -153,7 +154,7 @@ class PermissionHandlerWebfModule extends WebFBaseModule {
       final status = await permission.request();
       return webfOk(status.name);
     } catch (e) {
-      _log.w('request failed: $e');
+      _log.warning('request failed: $e');
       return webfErr(e.toString());
     }
   }
@@ -200,7 +201,7 @@ class PermissionHandlerWebfModule extends WebFBaseModule {
       final value = await permission.shouldShowRequestRationale;
       return webfOk(value);
     } catch (e) {
-      _log.w('shouldShowRequestRationale failed: $e');
+      _log.warning('shouldShowRequestRationale failed: $e');
       return webfErr(e.toString());
     }
   }
@@ -210,7 +211,7 @@ class PermissionHandlerWebfModule extends WebFBaseModule {
       final opened = await openAppSettings();
       return webfOk(opened);
     } catch (e) {
-      _log.w('openAppSettings failed: $e');
+      _log.warning('openAppSettings failed: $e');
       return webfErr(e.toString());
     }
   }
