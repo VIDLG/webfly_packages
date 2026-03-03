@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_blue_plus: ^2.1.0
-  webf: ^0.24.11
+  webf: ^0.24.14
   webfly_bridge:
     path: ../webfly_bridge
   anyhow: ^3.0.1

@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  webf: ^0.24.11
+  webf: ^0.24.14
   go_router: ^17.0.1
   flutter_hooks: ^0.21.3
   flutter_use: ^1.0.0

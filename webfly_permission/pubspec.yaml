@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   permission_handler: ^12.0.1
-  webf: ^0.24.11
+  webf: ^0.24.14
   webfly_bridge:
     path: ../webfly_bridge
   logging: ^1.3.0
