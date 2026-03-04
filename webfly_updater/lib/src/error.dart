@@ -10,10 +10,36 @@ sealed class UpdateError {
 /// Network-level failure (DNS, timeout, HTTP error, etc.).
 class NetworkError extends UpdateError {
   final String message;
-  const NetworkError(this.message);
+
+  /// Optional human-readable detail from the server response (e.g. GitHub API
+  /// error body `{"message": "API rate limit exceeded"}`).
+  final String? detail;
+
+  /// Optional URL to documentation for this error (e.g. GitHub's
+  /// `documentation_url` field).
+  final String? documentationUrl;
+
+  /// Rate limit ceiling for the resource (from `X-RateLimit-Limit` header).
+  final int? rateLimitLimit;
+
+  /// Remaining requests in the current window (from `X-RateLimit-Remaining`).
+  final int? rateLimitRemaining;
+
+  /// When the current rate limit window resets (from `X-RateLimit-Reset`).
+  final DateTime? rateLimitReset;
+
+  const NetworkError(
+    this.message, {
+    this.detail,
+    this.documentationUrl,
+    this.rateLimitLimit,
+    this.rateLimitRemaining,
+    this.rateLimitReset,
+  });
 
   @override
-  String toString() => 'NetworkError: $message';
+  String toString() => 'NetworkError: $message'
+      '${detail != null ? ' ($detail)' : ''}';
 }
 
 /// SHA256 hash of the downloaded APK does not match the expected value.

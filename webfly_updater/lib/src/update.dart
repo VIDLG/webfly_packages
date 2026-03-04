@@ -17,30 +17,95 @@ final _log = Logger('webfly_updater');
 // Network Error Handling
 // ---------------------------------------------------------------------------
 
+/// Extract rate limit fields from GitHub API response headers.
+({int? limit, int? remaining, DateTime? reset}) _extractRateLimit(
+  Headers headers,
+) {
+  final limit = int.tryParse(headers.value('x-ratelimit-limit') ?? '');
+  final remaining = int.tryParse(headers.value('x-ratelimit-remaining') ?? '');
+  final resetEpoch = int.tryParse(headers.value('x-ratelimit-reset') ?? '');
+  final reset = resetEpoch != null
+      ? DateTime.fromMillisecondsSinceEpoch(resetEpoch * 1000)
+      : null;
+  return (limit: limit, remaining: remaining, reset: reset);
+}
+
+/// Build a [NetworkError] from an HTTP response, including rate limit info.
+NetworkError _networkErrorFromResponse(Response response) {
+  final statusCode = response.statusCode;
+  String? detail;
+  String? docUrl;
+  final data = response.data;
+  if (data is Map) {
+    detail = data['message'] as String?;
+    docUrl = data['documentation_url'] as String?;
+  }
+  final rl = _extractRateLimit(response.headers);
+  return NetworkError(
+    'HTTP ${statusCode ?? '?'}',
+    detail: detail,
+    documentationUrl: docUrl,
+    rateLimitLimit: rl.limit,
+    rateLimitRemaining: rl.remaining,
+    rateLimitReset: rl.reset,
+  );
+}
+
 /// Execute a network request and convert exceptions to [NetworkError].
+///
+/// [onResponse] is called with the raw [Response] before parsing, useful for
+/// extracting headers (e.g. ETag).
 Future<T> _executeRequest<T>(
   Future<Response> Function() request, {
   required T Function(dynamic) parser,
+  void Function(Response)? onResponse,
 }) async {
   try {
     final response = await request();
     final statusCode = response.statusCode ?? 0;
     if (statusCode < 200 || statusCode >= 300) {
-      throw NetworkError('HTTP $statusCode');
+      // Allow onResponse to handle non-error statuses like 304.
+      if (onResponse != null &&
+          (statusCode == 304 || statusCode == 301 || statusCode == 302)) {
+        onResponse(response);
+        return parser(response.data);
+      }
+      throw _networkErrorFromResponse(response);
     }
+    onResponse?.call(response);
     return parser(response.data);
   } on UpdateError {
     rethrow;
   } on DioException catch (e) {
-    throw NetworkError('Network error: ${e.message}');
+    throw _networkErrorFromDio(e);
   } catch (e) {
     throw NetworkError('Unexpected error: $e');
   }
 }
 
+/// Extract as much useful context as possible from a [DioException].
+NetworkError _networkErrorFromDio(DioException e) {
+  // If there's an HTTP response, reuse the shared response parser.
+  if (e.response != null) return _networkErrorFromResponse(e.response!);
+
+  // No response — classify by DioExceptionType.
+  final msg = switch (e.type) {
+    DioExceptionType.connectionTimeout => 'Connection timed out',
+    DioExceptionType.sendTimeout => 'Send timed out',
+    DioExceptionType.receiveTimeout => 'Receive timed out',
+    DioExceptionType.connectionError => 'Connection error',
+    _ => 'Network error: ${e.message}',
+  };
+  return NetworkError(msg);
+}
+
 // ---------------------------------------------------------------------------
 // GitHub Release Checking
 // ---------------------------------------------------------------------------
+
+// Cached ETag and response for conditional requests (avoids rate-limit hits).
+String? _cachedETag;
+GitHubReleaseResponse? _cachedRelease;
 
 /// Fetch the latest GitHub release and return a [ReleaseInfo] when a newer
 /// version is available. Returns `null` when up to date.
@@ -50,6 +115,11 @@ Future<T> _executeRequest<T>(
 ///
 /// [currentVersion] should include the `v` prefix (e.g. `'v0.8.1'`).
 /// [networkConfig] allows customizing network request parameters.
+///
+/// Uses HTTP conditional requests (`If-None-Match` / ETag) so that repeated
+/// checks that return 304 Not Modified do NOT count against GitHub's rate
+/// limit (60 req/h unauthenticated).
+///
 /// Throws [UpdateError] on network / parse errors.
 Future<ReleaseInfo?> checkForUpdates({
   required String releaseUrl,
@@ -63,19 +133,42 @@ Future<ReleaseInfo?> checkForUpdates({
   dio.options.receiveTimeout = config.receiveTimeout;
   dio.options.followRedirects = config.followRedirects;
   dio.options.maxRedirects = config.maxRedirects;
+  // Accept 304 as a valid response (not an error).
+  dio.options.validateStatus = (status) =>
+      (status != null && status >= 200 && status < 300) || status == 304;
 
   final headers = {
     'Accept': 'application/vnd.github.v3+json',
     ...config.headers,
+    if (_cachedETag case final etag?) 'If-None-Match': etag,
   };
 
-  final release = await _executeRequest<GitHubReleaseResponse>(
+  final release = await _executeRequest<GitHubReleaseResponse?>(
     () => dio.getUri(Uri.parse(releaseUrl), options: Options(headers: headers)),
-    parser: (data) =>
-        GitHubReleaseResponse.fromJson(data as Map<String, dynamic>),
+    parser: (data) {
+      // 304 – no change since last check; reuse cached response.
+      if (data == null || data == '') return null;
+      return GitHubReleaseResponse.fromJson(data as Map<String, dynamic>);
+    },
+    onResponse: (response) {
+      if (response.statusCode == 304) {
+        _log.fine('304 Not Modified — using cached release');
+        return;
+      }
+      // Cache ETag for next request.
+      final etag = response.headers.value('etag');
+      if (etag != null) _cachedETag = etag;
+    },
   );
 
-  return _releaseMetadataToReleaseInfo(release, currentVersion, testMode);
+  final resolved = release ?? _cachedRelease;
+  if (resolved == null) {
+    // No cached data and 304 — shouldn't happen, but treat as up-to-date.
+    return null;
+  }
+  if (release != null) _cachedRelease = release;
+
+  return _releaseMetadataToReleaseInfo(resolved, currentVersion, testMode);
 }
 
 /// Strip the optional `v` prefix and any build metadata (`+N`) so the string
@@ -229,11 +322,15 @@ Future<void> _downloadAndInstallInternal(
     _log.info('Install dialog triggered');
     onComplete(apkPath);
   } on DioException catch (e) {
-    _log.severe('Download error: ${e.message}');
-    onError(DownloadError('Download failed: ${e.message}'));
+    final detail = e.response?.statusCode;
+    final msg = detail != null
+        ? 'Download failed: HTTP $detail'
+        : 'Download failed: ${e.type.name}';
+    _log.severe(msg);
+    onError(DownloadError(msg));
   } catch (e) {
-    _log.severe('Unexpected error: $e');
-    onError(DownloadError('Unexpected error: $e'));
+    _log.severe('Download failed: $e');
+    onError(DownloadError('$e'));
   }
 }
 
