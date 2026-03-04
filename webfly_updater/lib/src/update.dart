@@ -140,7 +140,7 @@ Future<ReleaseInfo?> checkForUpdates({
   final headers = {
     'Accept': 'application/vnd.github.v3+json',
     ...config.headers,
-    if (_cachedETag case final etag?) 'If-None-Match': etag,
+    'If-None-Match': ?_cachedETag,
   };
 
   final release = await _executeRequest<GitHubReleaseResponse?>(
