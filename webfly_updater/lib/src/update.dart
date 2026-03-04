@@ -151,6 +151,11 @@ Future<ReleaseInfo?> checkForUpdates({
       return GitHubReleaseResponse.fromJson(data as Map<String, dynamic>);
     },
     onResponse: (response) {
+      final rl = _extractRateLimit(response.headers);
+      if (rl.remaining != null) {
+        _log.info('Rate limit: ${rl.remaining}/${rl.limit} remaining'
+            '${rl.reset != null ? ', resets ${rl.reset}' : ''}');
+      }
       if (response.statusCode == 304) {
         _log.fine('304 Not Modified — using cached release');
         return;
@@ -224,13 +229,16 @@ ReleaseInfo? _releaseMetadataToReleaseInfo(
 Stream<UpdateState> downloadAndInstall(
   String downloadUrl, {
   NetworkConfig? networkConfig,
+  CancelToken? cancelToken,
 }) {
   final controller = StreamController<UpdateState>();
 
   _downloadAndInstallInternal(
     downloadUrl,
     networkConfig: networkConfig,
+    cancelToken: cancelToken,
     onProgress: (progress) {
+      if (cancelToken?.isCancelled ?? false) return;
       controller.add(UpdateDownloading(progress: progress));
     },
     onComplete: (apkPath) {
@@ -244,6 +252,10 @@ Stream<UpdateState> downloadAndInstall(
     onInstalling: () {
       controller.add(const UpdateInstalling());
     },
+    onCancelled: () {
+      controller.add(const UpdateCancelled());
+      controller.close();
+    },
   );
 
   return controller.stream;
@@ -252,10 +264,12 @@ Stream<UpdateState> downloadAndInstall(
 Future<void> _downloadAndInstallInternal(
   String downloadUrl, {
   NetworkConfig? networkConfig,
+  CancelToken? cancelToken,
   required void Function(double progress) onProgress,
   required void Function(String apkPath) onComplete,
   required void Function(UpdateError error) onError,
   required void Function() onInstalling,
+  required void Function() onCancelled,
 }) async {
   final config = networkConfig ?? const NetworkConfig();
   final dio = Dio();
@@ -281,6 +295,7 @@ Future<void> _downloadAndInstallInternal(
     await dio.download(
       downloadUrl,
       apkPath,
+      cancelToken: cancelToken,
       onReceiveProgress: (received, total) {
         if (total > 0) {
           final progress = received / total;
@@ -322,6 +337,11 @@ Future<void> _downloadAndInstallInternal(
     _log.info('Install dialog triggered');
     onComplete(apkPath);
   } on DioException catch (e) {
+    if (e.type == DioExceptionType.cancel) {
+      _log.info('Download cancelled by user');
+      onCancelled();
+      return;
+    }
     final detail = e.response?.statusCode;
     final msg = detail != null
         ? 'Download failed: HTTP $detail'

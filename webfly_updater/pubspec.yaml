@@ -8,6 +8,13 @@ environment:
   sdk: ^3.10.7
   flutter: ">=3.10.0"
 
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: org.vidlg.webfly_updater
+        pluginClass: WebflyUpdaterPlugin
+
 dependencies:
   flutter:
     sdk: flutter
@@ -18,3 +25,6 @@ dependencies:
   open_filex: ^4.7.0
   path_provider: ^2.1.5
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

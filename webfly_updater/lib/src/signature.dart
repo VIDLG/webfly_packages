@@ -7,7 +7,7 @@ final _log = Logger('webfly_updater');
 // APK Signature Verification
 // ---------------------------------------------------------------------------
 
-const _signatureChannel = MethodChannel('org.vidlg.webfly/signature');
+const _signatureChannel = MethodChannel('webfly_updater/signature');
 
 /// Returns the SHA-256 fingerprint of the signing certificate for the
 /// currently installed app, or `null` if unavailable.
